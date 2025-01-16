@@ -6,15 +6,15 @@
 #
 
 import os
-import xbmc, xbmcaddon, xbmcgui, xbmcplugin
+import xbmc, xbmcvfs, xbmcaddon, xbmcgui, xbmcplugin
 import re, traceback, datetime
-import urllib, urlparse, urllib2, base64, json
+import urllib.request, urllib.parse, urllib.error, urllib.parse, urllib.request, urllib.error, urllib.parse, base64, json
 import time
 import threading
 
 
 __addon__       = xbmcaddon.Addon()
-__addon_id__    = "plugin.program.domoticz2"
+__addon_id__    = "plugin.program.HomeView"
 __author__      = "Peter Verčkovnik"
 __version__     = "0.0.1"
 
@@ -22,7 +22,7 @@ __version__     = "0.0.1"
 __language__    = xbmcaddon.Addon(__addon_id__).getLocalizedString
 CWD             = xbmcaddon.Addon(__addon_id__).getAddonInfo('path')
 __addonname__   = __addon__.getAddonInfo('id')
-__dataroot__    = xbmc.translatePath('special://profile/addon_data/%s' % __addonname__ ).decode('utf-8')
+__dataroot__    = xbmcvfs.translatePath('special://profile/addon_data/%s' % __addonname__ )
 RESOURCE_PATH   = os.path.join(CWD, "resources" )
 
 DomoticzIP      = xbmcaddon.Addon(__addon_id__).getSetting('ip')
@@ -94,17 +94,20 @@ class MainGUI(xbmcgui.WindowXMLDialog):
         for item in self.devices:
             listitem = xbmcgui.ListItem( label = item[__NAME__] )
             
-            listitem.setIconImage( item[__IMAGE__] )
+            listitem.setArt( {'thumb': item[__IMAGE__]} )
             listitem.setProperty( "idx", item[__IDX__] )
 
             self.getControl( 112 ).addItem( listitem )
-	    
-	if ListNumber == 0 :
-	    listitem = xbmcgui.ListItem( label = "Padavine" )            
-            listitem.setIconImage( "http://"+ DomoticzIP + ":" + DomoticzPort +"/images/dimmer48-on.png" )
+    
+        if ListNumber == 0 :
+            listitem = xbmcgui.ListItem( label = "izklopi RADIO" )            
+            listitem.setArt({'thumb': "http://"+ DomoticzIP + ":" + DomoticzPort +"/images/dimmer48-on.png"})
+            listitem.setProperty( "idx", "9989" )
+            self.getControl( 112 ).addItem( listitem )
+            listitem = xbmcgui.ListItem( label = "Padavine" )            
+            listitem.setArt({'thumb': "http://"+ DomoticzIP + ":" + DomoticzPort +"/images/dimmer48-on.png"})
             listitem.setProperty( "idx", "9999" )
-	    self.getControl( 112 ).addItem( listitem )
-	 
+        self.getControl( 112 ).addItem( listitem )
         self.getControl( 112 ).setItemHeight( ITEM_HEIGHT * double )
         self.setFocus(self.getControl(112))
         
@@ -162,7 +165,11 @@ class MainGUI(xbmcgui.WindowXMLDialog):
                 self.domoticz.setradar(self)
                 return
             if (idx=="9989"):
-                self.domoticz.setradar(self)
+                request = urllib.request.Request("http://192.168.0.221/init?language=en")
+                urllib.request.urlopen(request).read()
+                request = urllib.request.Request("http://192.168.0.221/stop")
+                urllib.request.urlopen(request).read()
+                self.close()
                 return
             if (idx=="48"):
                 self.domoticz.setcam(self, 1)
@@ -195,13 +202,15 @@ class MainGUI(xbmcgui.WindowXMLDialog):
 
 class clsDomoticz:
     def __init__(self):
-        self.base64string = base64.encodestring('%s:%s' % (DomoticzUser, DomtoiczPwd)).replace('\n', '')
+        self.base64string = ""#base64.encodestring('%s:%s' % (DomoticzUser, DomtoiczPwd)).replace('\n', '')
+        
         self.Timer = None
        
     def load_json(self, url):
-        request = urllib2.Request(url)
+        #xbmc.log("URL : %s" % url,xbmc.LOGERROR)
+        request = urllib.request.Request(url)
         request.add_header("Authorization", "Basic %s" % self.base64string)
-        return urllib2.urlopen(request).read()
+        return urllib.request.urlopen(request).read()
 
     # takes 2 arguments. first if only favorites should be listed (0 or 1) and the second is the plan id. if no plan is selected it should be 0
     def list_switches(self, IsFavorite, plan):
@@ -328,10 +337,25 @@ class clsDomoticz:
                     item.append (json_object["result"][i]["idx"])
                     item.append (json_object["result"][i]["Name"]+ "   :\r\n"+json_object["result"][i]["Data"])
                     item.append (json_object["result"][i]["Type"])
-                    
+                    xbmc.log("temp %s" % json_object["result"][i]["Temp"],xbmc.LOGERROR)
                     # Image
-                    item.append ("http://"+ DomoticzIP + ":" + DomoticzPort +"/images/temperature.png")
-                    
+                    img = int(json_object["result"][i]["Temp"])
+                    if (img>30):
+                        item.append ("http://"+ DomoticzIP + ":" + DomoticzPort +"/images/temp48.png")
+                    elif (img>25):
+                        item.append ("http://"+ DomoticzIP + ":" + DomoticzPort +"/images/temp-25-30.png")
+                    elif (img>20):
+                        item.append ("http://"+ DomoticzIP + ":" + DomoticzPort +"/images/temp-20-25.png")
+                    elif (img>15):
+                        item.append ("http://"+ DomoticzIP + ":" + DomoticzPort +"/images/temp-15-20.png")
+                    elif (img>10):
+                        item.append ("http://"+ DomoticzIP + ":" + DomoticzPort +"/images/temp-10-15.png")
+                    elif (img>5):
+                        item.append ("http://"+ DomoticzIP + ":" + DomoticzPort +"/images/temp-5-10.png")
+                    elif (img>=0):
+                        item.append ("http://"+ DomoticzIP + ":" + DomoticzPort +"/images/temp-0-5.png")
+                    else:
+                        item.append ("http://"+ DomoticzIP + ":" + DomoticzPort +"/images/ice.png")
                     # Status
                     item.append (2)
                     
@@ -394,9 +418,9 @@ class clsDomoticz:
             update_domoticz = 1
 
         if update_domoticz:
-            request = urllib2.Request(self.url)
+            request = urllib.request.Request(self.url)
             request.add_header("Authorization", "Basic %s" % self.base64string)
-            self.response = urllib2.urlopen(request).read()
+            self.response = urllib.request.urlopen(request).read()
 
     def setcam (self, kodi, idx):
         #kodi.getControl( 150 ).setImage('http://127.0.0.1:8080/camsnapshot.jpg?idx='+str(idx)+'?t='+str(time.time())+'000',False)
@@ -448,9 +472,9 @@ class clsDomoticz:
             update_domoticz = 1
 
         if update_domoticz:
-            request = urllib2.Request(self.url)
+            request = urllib.request.Request(self.url)
             request.add_header("Authorization", "Basic %s" % self.base64string)
-            self.response = urllib2.urlopen(request).read()
+            self.response = urllib.request.urlopen(request).read()
 
 #open(os.path.join( __dataroot__, "text.txt" ), 'a').close()
 class DialogWindow(xbmcgui.WindowDialog):
@@ -496,3 +520,4 @@ class DialogWindow(xbmcgui.WindowDialog):
 
 ui = MainGUI("main_gui.xml",CWD,"Default")
 ui.doModal()
+
